@@ -54,14 +54,26 @@ class Agent:
             print(print_line)
         print(" ")
 
+    def delta_definer(self):
+        delta = 0
+        for row in self.m.locations:
+            for column in row:
+                if abs(column[2] - column[0]) > delta:
+                    delta = abs(column[2] - column[0])
+        return delta
+
     def value_iteration(self, k=8):
         self.discountfactor = 1
         self.maze_valueprinter()
-        for x in range(k):
-            print("\033[1m {}\033[00m".format("K=" + str(x+1)))
+        k=0
+        delta = 0.1
+        while delta >= 0.1:
+            k=k+1
+            print("\033[1m {}\033[00m".format("K=" + str(k)))
             for row in range(len(self.m.locations)):
                 for column in range(len(self.m.locations[row])):
                     self.m.locations[row][column][2] = self.state_definer([column, row])
+            delta = self.delta_definer()
             for row in range(len(self.m.locations)):
                 for column in range(len(self.m.locations[row])):
                     self.m.locations[row][column][0] = self.m.locations[row][column][2]
