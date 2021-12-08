@@ -2,7 +2,8 @@ Code Structure:
 
 - Class Maze:
     - init: save the maze locations & endstates
-    - get_locations: get the maze locations in a fashionable way
+    - print_locations: prints the maze locations in a fashionable way
+    - get_locations: get the maze locations
     - set_locations: set the maze locations
     - get_endstates: get the maze endstates
     - set_endstates: set the maze endstates
