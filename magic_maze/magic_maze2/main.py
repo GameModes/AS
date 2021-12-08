@@ -19,25 +19,25 @@ class Maze:
         Prints the maze lists in a fashionable style
         """
         print("\033[1m {}\033[00m".format("Values:"))
-        print_line = ""
+        print_line = "\033[34m {}\033[33m".format("|")
         for key in  self.locations.keys():
             value =  self.locations.get(key)
-            print_line += ("\033[34m {}\033[33m".format("|") + "\033[91m {}\033[00m" .format(value.v))
+            print_line += ("\033[91m {}\033[00m" .format(round(value.v)))
             print_line += "\033[34m {}\033[33m".format("|")
             if 3 == key[0]:
                 print(print_line)
-                print_line = ""
+                print_line = "\033[34m {}\033[33m".format("|")
         print(" ")
         if not self.reward_locations_printed:
             print("\033[1m {}\033[00m".format("Rewards:"))
-            print_line = ""
+            print_line = "\033[34m {}\033[33m".format("|")
             for key in self.locations.keys():
                 value = self.locations.get(key)
-                print_line += ("\033[34m {}\033[33m".format("|") + "\033[91m {}\033[00m".format(value.r))
+                print_line += ("\033[91m {}\033[00m".format(value.r))
                 print_line += "\033[34m {}\033[33m".format("|")
                 if 3 == key[0]:
                     print(print_line)
-                    print_line = ""
+                    print_line = "\033[34m {}\033[33m".format("|")
             print(" ")
             self.reward_locations_printed = True
 
@@ -58,26 +58,23 @@ class Policy:
         :return: the grid with every arrow towards the next possible value aka the policy grid
         """
         possible_directions = ["←", "→", "↑", "↓"]
-        print_line = ""
+        print_line = "\033[34m {}\033[33m".format("|")
         for key in locations.keys():
             value = locations.get(key)
             if value.endstate:
-                print_line += ("\033[34m {}\033[33m".format("|") + "\033[91m {}\033[00m".format("X"))
+                print_line += ("\033[91m {}\033[00m".format("X"))
             else:
                 neighbour_values = self.select_action(key, locations, discountfactor)
-                # print(neighbour_values)
                 highest_index_states = [i for i, x in enumerate(neighbour_values) if x == max(neighbour_values)]
                 direction = possible_directions[highest_index_states[0]]
-                print_line += ("\033[34m {}\033[33m".format("|") + "\033[91m {}\033[00m".format(direction))
+                print_line += ("\033[91m {}\033[00m".format(direction))
                 if len(highest_index_states) > 1:
                     for x in highest_index_states[1:]:
                         print_line += ("\033[91m {}\033[00m".format(possible_directions[x]))
             print_line += "\033[34m {}\033[33m".format("|")
             if 3 == key[0]:
                 print(print_line)
-                print_line = ""
-
-        # return policygrid
+                print_line = "\033[34m {}\033[33m".format("|")
 
     def select_action(self, current_coordinates, locations, discountfactor):
         neighbourclosevalues = [[-1, 0], [1, 0], [0, -1], [0, 1]]
@@ -100,7 +97,8 @@ class Agent:
         """
         self.m = m
         self.pol = pol
-        self.discountfactor = 0.9
+        self.discountfactor = 1
+        self.gamma = 0.1
 
 
     def delta_definer(self):
@@ -134,6 +132,7 @@ class Agent:
             for key in locations.keys():
                 value = locations.get(key)
                 value.next_v = max(self.pol.select_action(key, locations, self.discountfactor))
+
             delta = self.delta_definer()
             for key in locations.keys():
                 value = locations.get(key)
@@ -142,15 +141,23 @@ class Agent:
             self.m.print_locations()
 
         policygrid = policyX.create_policy_grid(locations, self.discountfactor)
-        # print("\033[1m {}\033[00m".format("Policygrid "))
-        # self.maze_valueprinter(policygrid)
 
-    def create_episode(self, start_position):
+    def create_episode(self, start_position=(0,0)):
+        """
+        copy the position (as list because tuples dont have copy () and to use the np.add)
+        runs the while loop until the position is an endstate
+        create a random x value to move, if zero then random y value to move
+        find the real coordinates by adding the list together eg. [0,3] + [1,0] (right neighbour) = [1,3]
+        add this neighbour to the episode list
+        :param start_position: creates episodes from this startpoint
+        :return: a list with multiple random steps until it reaches the endstates
+        """
         position = list(start_position).copy()
-        episode = [position]
+        episode = [position] #start position
         while not self.m.locations.get(tuple(position)).endstate:
             moving_x = random.randint(-1, 1)
-            if moving_x != -1 or moving_x != 1:
+            moving_y = 0
+            if moving_x == 0: #prevents diagonal movements
                 moving_y = random.randint(-1, 1)
             position = np.add(position, [moving_x, moving_y]).clip(min=0, max=3).tolist()
             episode.append(position)
@@ -161,11 +168,9 @@ class Agent:
         run_times = 3000
         for x in range(run_times):
             episode = self.create_episode(start_position)
-            # print(episode)
             G = 0
             for index, step in reversed(list(enumerate(episode))):
                 if not self.m.locations.get(tuple(step)).endstate and episode[index] != episode[-1]:
-                    # print("This: ", tuple(episode[index]), " next: ", tuple(episode[index + 1]))
                     G = self.discountfactor * G + self.m.locations.get(tuple(episode[index+1])).r
                     if step not in episode[0:index]:
                         self.m.locations.get(tuple(step)).g.append(G)
@@ -173,6 +178,36 @@ class Agent:
             self.m.print_locations()
         policyX.create_policy_grid(locations, self.discountfactor)
 
+    def td_learning(self, start_position):
+        locations = self.m.get_locations()
+        run_times = 3000
+        for x in range(run_times):
+            episode = self.create_episode(start_position)
+            for step in range(len(episode)):
+                if episode[step] != episode[-1]:
+                    currentstep = episode[step]
+                    nextstep = episode[step+1]
+                    r2 = self.m.locations.get(tuple(nextstep)).r
+                    v1 = self.m.locations.get(tuple(currentstep)).v
+                    v2 = self.m.locations.get(tuple(nextstep)).v
+                    self.m.locations.get(tuple(currentstep)).v = v1 + self.gamma * (r2 + self.discountfactor*v2-v1)
+                    # print(r2, v1, v2, self.m.locations.get(tuple(currentstep)).v)
+                #V(previous_state) = V(previous_state) + learning_rate * (R + discountfactor*V(current_value) - V(previousvalue))
+                #S = S'
+            self.m.print_locations()
+        self.pol.create_policy_grid(self.m.locations, self.discountfactor)
+
+    def policy_monte_carlo(self):
+        pass
+
+    def sarsa(self):
+        pass
+
+    def sarsa_max(self):
+        pass
+
+    def double_q_learning(self):
+        pass
 
 @dataclass
 class Location:
@@ -202,8 +237,10 @@ if __name__ == "__main__":
 
     #algoritms
     # agentX.value_iteration()
+
     start_position = (0,1)
-    agentX.monte_carlo(start_position)
+    # agentX.monte_carlo(start_position)
+    agentX.td_learning(start_position)
 
 
 
