@@ -168,12 +168,12 @@ class Agent:
         neighbours_scores = []
         for neighbour in neighbourclosevalues:
             neighbour_coordinates = self.move(current_coordinates, neighbour)
-
             neighbour_values = self.m.locations[neighbour_coordinates[1]][neighbour_coordinates[0]]
             if current_coordinates in self.m.endstates:
                 neighbours_scores.append(0)
             else:
                 neighbours_scores.append(neighbour_values[1]+self.discountfactor*neighbour_values[0])
+        print(neighbours_scores)
         return neighbours_scores
 
     def maze_valueprinter(self, locations):
@@ -224,6 +224,7 @@ class Agent:
             for row in range(len(self.m.locations)):
                 for column in range(len(self.m.locations[row])):
                     self.m.locations[row][column][2] = max(self.state_definer([column, row]))
+                    print(self.m.locations[row][column][2])
             delta = self.delta_definer()
             for row in range(len(self.m.locations)):
                 for column in range(len(self.m.locations[row])):
@@ -254,7 +255,7 @@ mazeX = Maze(mazeX_locations, None, endstates)
 policyX = Policy()
 
 agentX = Agent(mazeX, policyX)
-# agentX.value_iteration(agent_spawn_location) #runs the value iteration functions (aka the main)
+agentX.value_iteration(agent_spawn_location) #runs the value iteration functions (aka the main)
 agentX.maze_valueprinter(mazeX_locations)
-mazeX_locations = policyX.monte_carlo(mazeX_locations, agent_spawn_location, endstates, discountfactor=1)
-agentX.maze_valueprinter(mazeX_locations)
+# mazeX_locations = policyX.monte_carlo(mazeX_locations, agent_spawn_location, endstates, discountfactor=1)
+# agentX.maze_valueprinter(mazeX_locations)

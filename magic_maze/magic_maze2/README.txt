@@ -1,3 +1,9 @@
+How to run:
+    in the main function bottom of the code in magic_maze2\main.py you see the algorithms
+    if you delete the hashtag you can use it.
+    Also in the main there are most of the initiatives
+
+
 Code Structure:
 - Class Maze:
     - init: save the maze locations & endstates
