@@ -1,5 +1,4 @@
 import copy
-import statistics
 import random
 import numpy as np
 from dataclasses import dataclass
@@ -8,7 +7,7 @@ from dataclasses import dataclass
 class Maze:
     def __init__(self, locations):
         """
-        :param locations: every location of the grid with the template: [value, rewards, next_value]
+        :param locations: every location of the grid located in the dataclass location
         :param actions: saves all the used actions
         :param endstates: a list with every endstate coordinates
         """
@@ -17,7 +16,7 @@ class Maze:
 
     def print_locations(self):
         """
-        Prints the maze lists in a fashionable style
+        Prints the maze grid in a fashionable style and the rewards once (with rewards_locations_printed)
         """
         print("\033[1m {}\033[00m".format("Values:"))
         print_line = "\033[34m {}\033[33m".format("|")
@@ -55,11 +54,10 @@ class Policy:
     def create_policy_grid(self, locations, discountfactor):
         """
         Creates a grid with arrows pointing towards the point it needs to go, while adding a X to every endstate
-        :param locations: every location of the grid with the template: [value, rewards, next_value]
+        :param locations: every location of the grid located in the dataclass location
         :param discountfactor: the discountfactor used to calculate the best next value
-        :param endstates: a list with every endstate coordinates
-        :return: the grid with every arrow towards the next possible value aka the policy grid
         """
+        print("\033[1m {}\033[00m".format("Policygrid:"))
         possible_directions = ["←", "→", "↑", "↓"]
         print_line = "\033[34m {}\033[33m".format("|")
         for key in locations.keys():
@@ -79,7 +77,12 @@ class Policy:
                 print(print_line)
                 print_line = "\033[34m {}\033[33m".format("|")
 
-    def create_control_policy_grid(self,locations, discountfactor):
+    def create_control_policy_grid(self,locations):
+        """
+        The best direction is already calculated within every location, this function just places it on the right place to print it out
+        :param locations: every location of the grid located in the dataclass location
+        """
+        print("\033[1m {}\033[00m".format("Control PolicyGrid:"))
         print_line = "\033[34m {}\033[33m".format("|")
         for key in locations.keys():
             value = locations.get(key)
@@ -94,6 +97,13 @@ class Policy:
                 print_line = "\033[34m {}\033[33m".format("|")
 
     def select_action(self, current_coordinates, locations, discountfactor):
+        """
+        with the current coordinates if wil look to the values and rewards of the neigbours and returns every neighbours value in a list
+        :param current_coordinates: the current coordinates on the maze grid
+        :param locations: every location of the grid located in the dataclass location
+        :param discountfactor: the factor/impact that the values of others have on calculating the value
+        :return: a nested list with the coordinates of the neighbours and their values
+        """
         neighbourclosevalues = [[-1, 0], [1, 0], [0, -1], [0, 1]]
         neighbours_scores = []
         neighbours_coordinates = []
@@ -121,11 +131,17 @@ class Agent:
         self.gamma = 0.1
 
     def direction_converter(self, position, direction):
+        """
+        converts a direction with it's position (← & (1,0)) to the next position
+        """
         direction_dictonary = {"←":[-1, 0], "→":[1, 0], "↑":[0, -1], "↓":[0, 1]}
         next_position = tuple(np.add(position, direction_dictonary.get(direction)).clip(min=0, max=3).tolist())
         return next_position
 
     def delta_definer(self):
+        """
+        compares the next_v and v (next value(k=1) and current value(K=0)) with each other to return the highest difference/delta
+        """
         highest_delta = 0
         for loc_details in self.m.locations.values():
             if abs(loc_details.next_v - loc_details.v) > highest_delta:
@@ -145,7 +161,7 @@ class Agent:
         determines the next value when placed on a certain location (aka spawn location)
         :param spawn_location: the value used for the PolicyX.select_action function
         """
-
+        print("\033[92m\033[1m\033[4m {}\033[00m".format("Value Iteration:"))
         self.m.print_locations()
         locations = self.m.get_locations()
         k = 0
@@ -189,26 +205,44 @@ class Agent:
         return episode
 
     def create_control_episode(self, start_position=(0, 0)):
+        """
+        (montecarlo control uses probabity to explore instead of value so a new episode creator is needed)
+        loops until the current position is a endstate
+        creates random number to calculate which path is chosen with the probability dictionary
+        looks around with random number which direction is chosen
+        if so, breaks the for loop and add the step to the episode
+        when it reaches the endstate append the last episode with cross to indicate it doesnt move anymore
+        :param start_position:
+        :return: the episode list with position and the direction
+        """
         position = start_position
         episode = []  # start position
         while not self.m.locations.get(position).endstate:
-            random_policy_number = round(random.uniform(0,1), 3)
-            for key, value in self.m.locations.get(position).prob.items():
+            random_policy_number = round(random.uniform(0, 1), 3)
+            for direction, value in self.m.locations.get(position).prob.items():
                 if random_policy_number < value:
-                    episode.append([position, key])
-                    position = self.direction_converter(position, key)
+                    episode.append([position, direction])
+                    position = self.direction_converter(position, direction)
                     break
             episode.append([position, "X"])
         return episode
 
 
     def monte_carlo(self):
+        """
+        creates a startpoint with random values
+        runs the for loop x amount of times with a variable called run_times
+        creates a G value which updates every step from the episode and if that step is the first one than add the G value to the value to the position
+        adds the new G values from the positions to the maze grid
+        """
+        print("\033[92m\033[1m\033[4m {}\033[00m".format("Using monte_carlo:"))
         S = tuple(random.sample(range(0, 4), 2))
-        print(S)
+        print("\033[92m {}\033[00m".format("Start point: " + str(S)))
         locations = self.m.get_locations()
         run_times = 300000
         temp_locations = copy.deepcopy(locations)
         for x in range(run_times):
+            print("\033[92m {}\033[00m".format("Start point: " + str(S)))
             print("\033[92m {}\033[00m".format("Creating Episode..."))
             episode = self.create_episode(S)
             print("\033[92m {}\033[00m".format("Episode Created!"))
@@ -225,24 +259,49 @@ class Agent:
         policyX.create_policy_grid(locations, self.discountfactor)
 
     def td_learning(self):
+        """
+        (in comparison of monte_carlo this algoritm updates every step.)
+        create a S start_position
+        gets the possible next coordinates and next value with select action function
+        calculates the best next coordinates
+        gets the values and rewards of the current and next coordinates to use in the formula to calculate the new value
+        and changes the startposition to the next position
+        """
+        print("\033[92m\033[1m\033[4m {}\033[00m".format("Using TD Learning:"))
         run_times = 30000
         for x in range(run_times):
+            print("\033[36m {}\033[00m".format("Run time: " + str(x)))
             S = tuple(random.sample(range(0, 4), 2))
+            print("\033[92m {}\033[00m".format("Start point: " + str(S)))
             while not self.m.locations.get(tuple(S)).endstate:
                 next_coordinates, next_value = self.pol.select_action(S, locations, self.discountfactor)
-                best_next_step = next_coordinates[next_value.index(max(next_value))]
-                r2 = self.m.locations.get(tuple(best_next_step)).r
+                best_next_coordinates = next_coordinates[next_value.index(max(next_value))]
+                r2 = self.m.locations.get(tuple(best_next_coordinates)).r
                 v1 = self.m.locations.get(tuple(S)).v
-                v2 = self.m.locations.get(tuple(best_next_step)).v
+                v2 = self.m.locations.get(tuple(best_next_coordinates)).v
                 self.m.locations.get(tuple(S)).v = v1 + self.gamma * (r2 + self.discountfactor * v2 - v1)
                 # V(previous_state) = V(previous_state) + learning_rate * (R + discountfactor*V(current_value) - V(previousvalue))
-                S = best_next_step
+                S = best_next_coordinates
         self.m.print_locations()
         self.pol.create_policy_grid(self.m.locations, self.discountfactor)
 
     def policy_monte_carlo(self):
+        """
+        (uses probilities instead of max values to determine next location)
+        - loop with run_times
+            - create_random_start_point
+            - create a episode using a controlepisode function using probability
+            - g = 0
+            - reverse loop through it and skip endstate
+                - g = discountfactor * g + next_value
+                - check if g is in episode, if not
+                    add it to the Q table as [direction, g]
+                    get index of the highest G with the direction with Max
+                    update with the highest value of Q table in prob dictionary with the formula: 1-gamma+gamma/4
+                    update the rest of the values in prob dictionary with the formula: gamma/4
+        """
         print("\033[92m\033[1m\033[4m {}\033[00m".format("Using Policy Monte Carlo:"))
-        run_times = 300
+        run_times = 30
         locations = copy.deepcopy(self.m.locations)
         for x in range(run_times):
             print("\033[36m {}\033[00m".format("Run time: " + str(x)))
@@ -309,5 +368,5 @@ if __name__ == "__main__":
 
     start_position = (2, 3)
     # agentX.monte_carlo()
-    # agentX.td_learning()
-    agentX.policy_monte_carlo()
+    agentX.td_learning()
+    # agentX.policy_monte_carlo()
