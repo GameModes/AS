@@ -4,6 +4,7 @@ import random
 import numpy as np
 from dataclasses import dataclass
 
+
 class Maze:
     def __init__(self, locations):
         """
@@ -20,9 +21,9 @@ class Maze:
         """
         print("\033[1m {}\033[00m".format("Values:"))
         print_line = "\033[34m {}\033[33m".format("|")
-        for key in  self.locations.keys():
-            value =  self.locations.get(key)
-            print_line += ("\033[91m {}\033[00m" .format(round(value.v)))
+        for key in self.locations.keys():
+            value = self.locations.get(key)
+            print_line += ("\033[91m {}\033[00m".format(round(value.v)))
             print_line += "\033[34m {}\033[33m".format("|")
             if 3 == key[0]:
                 print(print_line)
@@ -40,6 +41,8 @@ class Maze:
                     print_line = "\033[34m {}\033[33m".format("|")
             print(" ")
             self.reward_locations_printed = True
+
+
 
     def set_locations(self, new_locations):
         self.locations = new_locations
@@ -76,6 +79,20 @@ class Policy:
                 print(print_line)
                 print_line = "\033[34m {}\033[33m".format("|")
 
+    def create_control_policy_grid(self,locations, discountfactor):
+        print_line = "\033[34m {}\033[33m".format("|")
+        for key in locations.keys():
+            value = locations.get(key)
+            if value.endstate:
+                print_line += ("\033[91m {}\033[00m".format("X"))
+            else:
+                direction = max(value.prob, key=value.prob.get)
+                print_line += ("\033[91m {}\033[00m".format(direction))
+            print_line += "\033[34m {}\033[33m".format("|")
+            if 3 == key[0]:
+                print(print_line)
+                print_line = "\033[34m {}\033[33m".format("|")
+
     def select_action(self, current_coordinates, locations, discountfactor):
         neighbourclosevalues = [[-1, 0], [1, 0], [0, -1], [0, 1]]
         neighbours_scores = []
@@ -87,9 +104,10 @@ class Policy:
             if locations.get(current_coordinates).endstate:
                 neighbours_scores.append(0)
             else:
-                neighbours_scores.append(neighbour_values.r+discountfactor*neighbour_values.v)
+                neighbours_scores.append(neighbour_values.r + discountfactor * neighbour_values.v)
         neighbours_scores = neighbours_scores
         return neighbours_coordinates, neighbours_scores
+
 
 class Agent:
     def __init__(self, m: Maze, pol: Policy):
@@ -102,10 +120,14 @@ class Agent:
         self.discountfactor = 1
         self.gamma = 0.1
 
+    def direction_converter(self, position, direction):
+        direction_dictonary = {"←":[-1, 0], "→":[1, 0], "↑":[0, -1], "↓":[0, 1]}
+        next_position = tuple(np.add(position, direction_dictonary.get(direction)).clip(min=0, max=3).tolist())
+        return next_position
 
     def delta_definer(self):
         highest_delta = 0
-        for loc_details in  self.m.locations.values():
+        for loc_details in self.m.locations.values():
             if abs(loc_details.next_v - loc_details.v) > highest_delta:
                 highest_delta = abs(loc_details.next_v - loc_details.v)
         return highest_delta
@@ -145,7 +167,7 @@ class Agent:
 
         policyX.create_policy_grid(locations, self.discountfactor)
 
-    def create_episode(self, start_position=(0,0)):
+    def create_episode(self, start_position=(0, 0)):
         """
         copy the position (as list because tuples dont have copy () and to use the np.add)
         runs the while loop until the position is an endstate
@@ -156,30 +178,49 @@ class Agent:
         :return: a list with multiple random steps until it reaches the endstates
         """
         position = list(start_position).copy()
-        episode = [position] #start position
+        episode = [position]  # start position
         while not self.m.locations.get(tuple(position)).endstate:
             moving_x = random.randint(-1, 1)
             moving_y = 0
-            if moving_x == 0: #prevents diagonal movements
+            if moving_x == 0:  # prevents diagonal movements
                 moving_y = random.randint(-1, 1)
             position = np.add(position, [moving_x, moving_y]).clip(min=0, max=3).tolist()
             episode.append(position)
         return episode
 
-    def monte_carlo(self, start_position):
+    def create_control_episode(self, start_position=(0, 0)):
+        position = start_position
+        episode = []  # start position
+        while not self.m.locations.get(position).endstate:
+            random_policy_number = round(random.uniform(0,1), 3)
+            for key, value in self.m.locations.get(position).prob.items():
+                if random_policy_number < value:
+                    episode.append([position, key])
+                    position = self.direction_converter(position, key)
+                    break
+            episode.append([position, "X"])
+        return episode
+
+
+    def monte_carlo(self):
+        S = tuple(random.sample(range(0, 4), 2))
+        print(S)
         locations = self.m.get_locations()
-        run_times = 30000
+        run_times = 300000
         temp_locations = copy.deepcopy(locations)
         for x in range(run_times):
-            episode = self.create_episode(start_position)
+            print("\033[92m {}\033[00m".format("Creating Episode..."))
+            episode = self.create_episode(S)
+            print("\033[92m {}\033[00m".format("Episode Created!"))
             G = 0
             for index, step in reversed(list(enumerate(episode))):
                 if not temp_locations.get(tuple(step)).endstate:
-                    G = self.discountfactor * G + temp_locations.get(tuple(episode[index+1])).r
+                    G = self.discountfactor * G + temp_locations.get(tuple(episode[index + 1])).r
                     if step not in episode[0:index]:
                         temp_locations.get(tuple(step)).g.append(G)
                         # self.m.locations.get(tuple(step)).v = statistics.mean(temp_locations.get(tuple(step)).g)
-                        self.m.locations.get(tuple(step)).v = sum(temp_locations.get(tuple(step)).g) / len(temp_locations.get(tuple(step)).g)
+                        self.m.locations.get(tuple(step)).v = sum(temp_locations.get(tuple(step)).g) / len(
+                            temp_locations.get(tuple(step)).g)
         self.m.print_locations()
         policyX.create_policy_grid(locations, self.discountfactor)
 
@@ -193,14 +234,37 @@ class Agent:
                 r2 = self.m.locations.get(tuple(best_next_step)).r
                 v1 = self.m.locations.get(tuple(S)).v
                 v2 = self.m.locations.get(tuple(best_next_step)).v
-                self.m.locations.get(tuple(S)).v = v1 + self.gamma * (r2 + self.discountfactor*v2-v1)
-                    #V(previous_state) = V(previous_state) + learning_rate * (R + discountfactor*V(current_value) - V(previousvalue))
+                self.m.locations.get(tuple(S)).v = v1 + self.gamma * (r2 + self.discountfactor * v2 - v1)
+                # V(previous_state) = V(previous_state) + learning_rate * (R + discountfactor*V(current_value) - V(previousvalue))
                 S = best_next_step
         self.m.print_locations()
         self.pol.create_policy_grid(self.m.locations, self.discountfactor)
 
     def policy_monte_carlo(self):
-        pass
+        print("\033[92m\033[1m\033[4m {}\033[00m".format("Using Policy Monte Carlo:"))
+        run_times = 300
+        locations = copy.deepcopy(self.m.locations)
+        for x in range(run_times):
+            print("\033[36m {}\033[00m".format("Run time: " + str(x)))
+            S = tuple(random.sample(range(0, 4), 2))
+            print("\033[92m {}\033[00m".format("Start point: " + str(S)))
+            print("\033[93m {}\033[00m".format("Creating Episode..."))
+            episode = self.create_control_episode(S)
+            print("\033[92m {}\033[00m".format("Episode Created!"))
+            G = 0
+            print("\033[93m {}\033[00m".format("Running through reversed Episode..."))
+            for index, step in reversed(list(enumerate(episode))): #template: [state, action]
+                if not locations.get(tuple(step[0])).endstate:
+                    G = self.discountfactor * G + locations.get(tuple(episode[index + 1][0])).r
+                    if step[0] not in episode[0:index]:
+                        self.m.locations.get(tuple(step[0])).qtable[step[1]] = G
+                        best_direction = max(self.m.locations.get(tuple(step[0])).qtable, key=self.m.locations.get(tuple(step[0])).qtable.get)
+                        self.m.locations.get(tuple(step[0])).prob[best_direction] = 1 - self.gamma + self.gamma / 4
+                        for probabilities in self.m.locations.get(tuple(step[0])).prob.items():
+                            if probabilities[0] != best_direction:
+                                self.m.locations.get(tuple(step[0])).prob[probabilities[0]] = self.gamma/4
+            print("\033[92m {}\033[00m".format("Done!"))
+        self.pol.create_control_policy_grid(self.m.locations, self.discountfactor)
 
     def sarsa(self):
         pass
@@ -208,12 +272,6 @@ class Agent:
     def sarsa_max(self):
         pass
 
-    def double_q_learning(self):
-        run_times = 3000
-        for x in range(run_times):
-            episode = self.create_episode(start_position)
-            for step in range(len(episode)):
-                pass
 
 @dataclass
 class Location:
@@ -223,14 +281,18 @@ class Location:
     r: int
     next_v: int
     g: list
+    prob: dict
+    qtable: dict
     endstate: bool
 
+
 if __name__ == "__main__":
-    #create the template given the exercise
+    # create the template given the exercise
     locations = {}
     for y in range(4):
-      for x in range(4):
-        locations[(x, y)] = Location(x=x, y=y, r=-1, endstate=False, v=0, next_v=0, g=[])
+        for x in range(4):
+            locations[(x, y)] = Location(x=x, y=y, r=-1, endstate=False, v=0, next_v=0, g=[],
+                                         prob={"←": 0.25, "→": 0.5, "↑": 0.75, "↓": 1}, qtable={"←": 0, "→": 0, "↑": 0, "↓": 0})
     locations[(3, 0)].r = 40
     locations[(3, 1)].r = -10
     locations[(2, 1)].r = -10
@@ -242,14 +304,10 @@ if __name__ == "__main__":
     policyX = Policy()
     agentX = Agent(mazeX, policyX)
 
-    #algoritms
-    agentX.value_iteration()
+    # algoritms
+    # agentX.value_iteration()
 
-    start_position = (2,3)
-    # agentX.monte_carlo(start_position)
-    agentX.td_learning()
-
-
-
-
-
+    start_position = (2, 3)
+    # agentX.monte_carlo()
+    # agentX.td_learning()
+    agentX.policy_monte_carlo()
