@@ -64,7 +64,7 @@ class Policy:
             if value.endstate:
                 print_line += ("\033[91m {}\033[00m".format("X"))
             else:
-                neighbour_values = self.select_action(key, locations, discountfactor)
+                _, neighbour_values = self.select_action(key, locations, discountfactor)
                 highest_index_states = [i for i, x in enumerate(neighbour_values) if x == max(neighbour_values)]
                 direction = possible_directions[highest_index_states[0]]
                 print_line += ("\033[91m {}\033[00m".format(direction))
@@ -79,15 +79,17 @@ class Policy:
     def select_action(self, current_coordinates, locations, discountfactor):
         neighbourclosevalues = [[-1, 0], [1, 0], [0, -1], [0, 1]]
         neighbours_scores = []
+        neighbours_coordinates = []
         for neighbour in neighbourclosevalues:
             neighbour_coordinates = tuple(np.add(current_coordinates, neighbour).clip(min=0, max=3).tolist())
             neighbour_values = locations.get(neighbour_coordinates)
+            neighbours_coordinates.append(neighbour_coordinates)
             if locations.get(current_coordinates).endstate:
                 neighbours_scores.append(0)
             else:
                 neighbours_scores.append(neighbour_values.r+discountfactor*neighbour_values.v)
         neighbours_scores = neighbours_scores
-        return neighbours_scores
+        return neighbours_coordinates, neighbours_scores
 
 class Agent:
     def __init__(self, m: Maze, pol: Policy):
@@ -131,7 +133,8 @@ class Agent:
             print("\033[1m {}\033[00m".format("K=" + str(k)))
             for key in locations.keys():
                 value = locations.get(key)
-                value.next_v = max(self.pol.select_action(key, locations, self.discountfactor))
+                _, next_value = self.pol.select_action(key, locations, self.discountfactor)
+                value.next_v = max(next_value)
 
             delta = self.delta_definer()
             for key in locations.keys():
@@ -140,7 +143,7 @@ class Agent:
             self.m.set_locations(locations)
             self.m.print_locations()
 
-        policygrid = policyX.create_policy_grid(locations, self.discountfactor)
+        policyX.create_policy_grid(locations, self.discountfactor)
 
     def create_episode(self, start_position=(0,0)):
         """
@@ -165,36 +168,35 @@ class Agent:
 
     def monte_carlo(self, start_position):
         locations = self.m.get_locations()
-        run_times = 3000
+        run_times = 30000
+        temp_locations = copy.deepcopy(locations)
         for x in range(run_times):
             episode = self.create_episode(start_position)
             G = 0
             for index, step in reversed(list(enumerate(episode))):
-                if not self.m.locations.get(tuple(step)).endstate and episode[index] != episode[-1]:
-                    G = self.discountfactor * G + self.m.locations.get(tuple(episode[index+1])).r
+                if not temp_locations.get(tuple(step)).endstate:
+                    G = self.discountfactor * G + temp_locations.get(tuple(episode[index+1])).r
                     if step not in episode[0:index]:
-                        self.m.locations.get(tuple(step)).g.append(G)
-                        self.m.locations.get(tuple(step)).v = statistics.mean(self.m.locations.get(tuple(step)).g)
-            self.m.print_locations()
+                        temp_locations.get(tuple(step)).g.append(G)
+                        # self.m.locations.get(tuple(step)).v = statistics.mean(temp_locations.get(tuple(step)).g)
+                        self.m.locations.get(tuple(step)).v = sum(temp_locations.get(tuple(step)).g) / len(temp_locations.get(tuple(step)).g)
+        self.m.print_locations()
         policyX.create_policy_grid(locations, self.discountfactor)
 
-    def td_learning(self, start_position):
-        locations = self.m.get_locations()
-        run_times = 3000
+    def td_learning(self):
+        run_times = 30000
         for x in range(run_times):
-            episode = self.create_episode(start_position)
-            for step in range(len(episode)):
-                if episode[step] != episode[-1]:
-                    currentstep = episode[step]
-                    nextstep = episode[step+1]
-                    r2 = self.m.locations.get(tuple(nextstep)).r
-                    v1 = self.m.locations.get(tuple(currentstep)).v
-                    v2 = self.m.locations.get(tuple(nextstep)).v
-                    self.m.locations.get(tuple(currentstep)).v = v1 + self.gamma * (r2 + self.discountfactor*v2-v1)
-                    # print(r2, v1, v2, self.m.locations.get(tuple(currentstep)).v)
-                #V(previous_state) = V(previous_state) + learning_rate * (R + discountfactor*V(current_value) - V(previousvalue))
-                #S = S'
-            self.m.print_locations()
+            S = tuple(random.sample(range(0, 4), 2))
+            while not self.m.locations.get(tuple(S)).endstate:
+                next_coordinates, next_value = self.pol.select_action(S, locations, self.discountfactor)
+                best_next_step = next_coordinates[next_value.index(max(next_value))]
+                r2 = self.m.locations.get(tuple(best_next_step)).r
+                v1 = self.m.locations.get(tuple(S)).v
+                v2 = self.m.locations.get(tuple(best_next_step)).v
+                self.m.locations.get(tuple(S)).v = v1 + self.gamma * (r2 + self.discountfactor*v2-v1)
+                    #V(previous_state) = V(previous_state) + learning_rate * (R + discountfactor*V(current_value) - V(previousvalue))
+                S = best_next_step
+        self.m.print_locations()
         self.pol.create_policy_grid(self.m.locations, self.discountfactor)
 
     def policy_monte_carlo(self):
@@ -207,7 +209,11 @@ class Agent:
         pass
 
     def double_q_learning(self):
-        pass
+        run_times = 3000
+        for x in range(run_times):
+            episode = self.create_episode(start_position)
+            for step in range(len(episode)):
+                pass
 
 @dataclass
 class Location:
@@ -229,6 +235,7 @@ if __name__ == "__main__":
     locations[(3, 1)].r = -10
     locations[(2, 1)].r = -10
     locations[(0, 3)].r = 10
+    locations[(1, 3)].r = -2
     locations[(3, 0)].endstate = True
     locations[(0, 3)].endstate = True
     mazeX = Maze(locations)
@@ -236,11 +243,11 @@ if __name__ == "__main__":
     agentX = Agent(mazeX, policyX)
 
     #algoritms
-    # agentX.value_iteration()
+    agentX.value_iteration()
 
-    start_position = (0,1)
+    start_position = (2,3)
     # agentX.monte_carlo(start_position)
-    agentX.td_learning(start_position)
+    agentX.td_learning()
 
 
 
