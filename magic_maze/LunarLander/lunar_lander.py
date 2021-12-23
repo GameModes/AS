@@ -5,12 +5,12 @@ import torch.nn as nn
 import torch.optim as optim
 import random
 import pandas as pd
-import matplotlib
 import matplotlib.pyplot as plt
 
 
 @dataclass
 class SARSd:
+    # Object dat alle data van een transition opslaat
     state: object
     action: int
     reward: float
@@ -19,11 +19,13 @@ class SARSd:
 
 
 class Memory:
+    # Object dat alle transitions opslaat
     def __init__(self):
         self.size = 10
         self.deque = []
 
     def sample(self):
+        # Returnt een random transition van de deque
         return random.choice(self.deque)
 
     def record(self, item):
@@ -31,6 +33,7 @@ class Memory:
 
 
 class DQN(nn.Module):
+    # Class die een DQN initialiseert
     def __init__(self):
         super(DQN, self).__init__()
         self.regressor = nn.Sequential(nn.Linear(8, 32),
@@ -45,6 +48,7 @@ class DQN(nn.Module):
 
 
 class Agent:
+    # Class die het meeste rekenwerk van het algoritme hanteerd
     def __init__(self):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.lr = 0.1
@@ -56,16 +60,15 @@ class Agent:
         self.optimiser = optim.Adam(self.policy_net.parameters(), lr=self.lr)
         self.mse = nn.MSELoss()
 
-    def Return_Q(self, state):
-        return self.target_net.forward(state)
-
     def Copy_model(self):
+        # Functie die Target network aanpast aan de hand van de Policy network
         tau = 0.001
         params = zip(self.policy_net.parameters(), self.target_net.parameters())
         for pol, tar in params:
             tar.data.copy_(tau * pol.data + (1 - tau) * tar.data)
 
     def train(self):
+        # Functie die de policy network traint aan de hand van een batch
         batch = [self.memory.sample() for i in range(self.batch_size)]
         states = [i.state for i in batch]
         actions = [i.action for i in batch]
@@ -92,75 +95,52 @@ class Agent:
         loss.backward()
         self.optimiser.step()
 
-        # targets = []
-        # for t in batch:
-        #     next_state = t.next_state
-        #     result = self.policy_net.forward(next_state)
-        #     max_value = max(result)
-        #     max_index = result.argmax()
-        #     if not t.done:
-        #         q = self.Return_Q(next_state)[max_index]
-        #     else:
-        #         q = torch.tensor(0)
-        #     target = t.reward + self.gamma * q
-        #     targets.append([next_state, target, t.action])
-        # for i in targets:
-        #     pred = self.policy_net(i[0])[i[2]]
-        #     loss = self.mse(i[1], pred)
-        #     self.optimiser.zero_grad()
-        #     loss.backward()
-        #     self.optimiser.step()
-        #
-        # # self.policy_net = self.target_net
-        # pass
 
-    def Set_weight(self):
-        pass
+if __name__ == "__main__":
+    # Initialiseren van de environment
+    env = gym.make('LunarLander-v2')
+    agent = Agent()
+    df = pd.DataFrame(columns=['steps', 'reward'])
 
-    def Load_weight(self):
-        pass
+    episodes = 5000
+    epsilon = 0.1
+    for i_episode in range(episodes):
+        # Runnen van de episodes
+        observation = env.reset()
+        # 0 = nothing
+        # 1 = right engine
+        # 2 = bottom engine
+        # 3 = left engine
+        tot_reward = 0
+        for t in range(200):
+            if i_episode >= episodes-21:
+                # Render de laatste 20 episodes
+                env.render()
+            old_observation = observation.copy()
 
+            # Haal de locatie van de beste keuze op en voer epsilon greedy policy uit
+            max_index = agent.policy_net(torch.from_numpy(observation)).argmax().item()
+            weights = [epsilon / 4 for i in range(4)]
+            weights[max_index] = 1 - epsilon + epsilon/4
+            action = random.choices(population=[0, 1, 2, 3], weights=weights)[0]
+            observation, reward, done, info = env.step(action)
 
-env = gym.make('LunarLander-v2')
-agent = Agent()
-df = pd.DataFrame(columns=['steps', 'reward'])
+            agent.memory.record(SARSd(state=old_observation, action=action, reward=reward, next_state=observation, done=done))
+            tot_reward += reward
+            if len(agent.memory.deque) >= agent.batch_size:
+                if t % 4 == 0:
+                    # Copy en update de netwerken elke 4 steps
+                    agent.train()
+                    agent.Copy_model()
+            if done:
+                # Stopt de episode als de lander de grond heeft bereikt of out of bounds is
+                df = df.append({'steps': i_episode, 'reward': tot_reward}, ignore_index=True)
+                # Opslaan van de total reward en de episode voor plotten
+                print(f"Episode {i_episode} finished after {t + 1} timesteps, average reward is {tot_reward / (t + 1)}, total is {tot_reward}")
+                break
+        env.close()
 
-episodes = 5000
-epsilon = 0.1
-for i_episode in range(episodes):
-    observation = env.reset()
-    # 0 = nothing
-    # 1 = right engine
-    # 2 = bottom engine
-    # 3 = left engine
-    # print(env.observation_space)
-    tot_reward = 0
-    for t in range(200):
-        if i_episode >= episodes-21:
-            env.render()
-        # observation = [x, y, x_vel, y_vel, lander_angle, angle_vel, left_contact, right_contact]
-        # print(observation)
-        old_observation = observation.copy()
-
-        max_index = torch.argmax(agent.policy_net(torch.from_numpy(observation))).item()
-        # max_index = agent.policy_net(observation).argmax()
-        weights = [epsilon / 4 for i in range(4)]
-        weights[max_index] = 1 - epsilon + epsilon/4
-        action = random.choices(population=[0, 1, 2, 3], weights=weights)[0]
-        observation, reward, done, info = env.step(action)
-
-        agent.memory.record(SARSd(state=old_observation, action=action, reward=reward, next_state=observation, done=done))
-        tot_reward += reward
-        if len(agent.memory.deque) >= agent.batch_size:
-            if t % 4 == 0:
-                agent.train()
-                agent.Copy_model()
-        if done:
-            df = df.append({'steps': i_episode, 'reward': tot_reward}, ignore_index=True)
-            print(f"Episode {i_episode} finished after {t + 1} timesteps, average reward is {tot_reward / (t + 1)}, total is {tot_reward}")
-            break
-    env.close()
-
-df['reward'].plot()
-plt.show()
+    # Laat een plot zien met de total rewards per episode
+    df['reward'].plot()
+    plt.show()
 
