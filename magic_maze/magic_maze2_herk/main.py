@@ -165,7 +165,7 @@ class Maze:
 
 #TODO Document this:
 class Agent:
-    def __init__(self, m: Maze, pol:Policy, discountfactor=1):
+    def __init__(self, m: Maze, pol:Policy, discountfactor=0.9):
         """
         :param m: the maze grid class
         :param pol: the policy class
@@ -179,7 +179,7 @@ class Agent:
     def monte_carlo_non_policy(self):
         "First visit monte carlo non_policy"
         returns_s = {x: [] for x in self.m.locations} #create empty return dictionary
-        for k in range(3000):
+        for k in range(10000):
             episode = self.non_policy_episode_creator()  # make episode
             G = 0
             for index, element in reversed(list(enumerate(episode))):  # reverse looping through epioside with correct index
@@ -194,7 +194,7 @@ class Agent:
     def monte_carlo_policy(self):
         "First visit monte carlo policy"
         self.pol.create_empty_control_values()
-        for k in range(1000):
+        for k in range(10000):
             episode = self.policy_episode_creator()
             G = 0
             for index, element in reversed(list(enumerate(episode))):  # reverse looping through epioside with correct index
@@ -297,17 +297,18 @@ if __name__ == "__main__":
     mazeB = Maze(entire_maze)
     mazeC = Maze(entire_maze)
 
+    discountfactor = 1
     #create policy
-    policyA = Policy()
-    policyB = Policy()
-    policyC = Policy()
+    policyA = Policy(discountfactor)
+    policyB = Policy(discountfactor)
+    policyC = Policy(discountfactor)
 
     #create the agent
-    AgentA = Agent(mazeA, policyA)
+    AgentA = Agent(mazeA, policyA, discountfactor)
     AgentA.monte_carlo_non_policy()
 
-    AgentB = Agent(mazeB, policyB)
+    AgentB = Agent(mazeB, policyB, discountfactor)
     AgentB.monte_carlo_policy()
 
-    AgentC = Agent(mazeC, policyC)
+    AgentC = Agent(mazeC, policyC, discountfactor)
     AgentC.sarsa()
