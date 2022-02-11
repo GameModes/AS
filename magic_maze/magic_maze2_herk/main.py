@@ -165,28 +165,30 @@ class Maze:
 
 #TODO Document this:
 class Agent:
-    def __init__(self, m: Maze, pol:Policy):
+    def __init__(self, m: Maze, pol:Policy, discountfactor=1):
         """
+        :param m: the maze grid class
+        :param pol: the policy class
         """
         self.m = m
         self.pol = pol
-        self.discountfactor = 1
+        self.discountfactor = discountfactor
         self.gamma = 0.1
         self.epsilon = 0.1
 
     def monte_carlo_non_policy(self):
         "First visit monte carlo non_policy"
-        returns_s = {x: [] for x in self.m.locations}
+        returns_s = {x: [] for x in self.m.locations} #create empty return dictionary
         for k in range(3000):
             episode = self.non_policy_episode_creator()  # make episode
             G = 0
             for index, element in reversed(list(enumerate(episode))):  # reverse looping through epioside with correct index
-                state = self.m.locations[element[0]]
+                state = self.m.locations[element[0]] #gets the state with the coordinates from the maze grid
                 current_step = (state.x, state.y)
                 G = self.discountfactor*G + state.r
                 if state not in [self.m.locations[move[0]] for move in episode[0: index]]: #to check if it's the first in the episode
                     returns_s[current_step].append(G)
-                    self.m.locations[current_step].v = sum(returns_s[current_step]) / len(returns_s[current_step])
+                    self.m.locations[current_step].v = mean(returns_s[current_step])
         self.m.print_locations()
 
     def monte_carlo_policy(self):
@@ -204,8 +206,7 @@ class Agent:
                         self.pol.returns[curr_step, element[1]].append(G)
                         #gets the average value of the movement and save it in q
                         self.pol.q[curr_step, element[1]] = mean(self.pol.returns[curr_step, element[1]])
-                        #gets the best value of the movement in save it in a_star
-
+                        #gets the best value of the movement actions in save it in a_star
                         action_values = {direction: self.pol.q[(curr_step, direction)] for direction in self.pol.get_directions()}
                         a_star_action = max(action_values, key=action_values.get) #https://stackoverflow.com/questions/268272/getting-key-with-maximum-value-in-dictionary
 
@@ -219,6 +220,9 @@ class Agent:
         self.pol.print_pi()
 
     def sarsa(self):
+        """
+        Sarsa, create a new episode after every new q values
+        """
         S = 0.1
         self.pol.create_empty_control_values()
         for k in range(10000):
@@ -235,6 +239,9 @@ class Agent:
         print(self.pol.print_Q())
 
     def non_policy_episode_creator(self):
+        """
+        :return: an episode, a list with positions and actions, that chooses his next position with the select_action() until the state is an endstate
+        """
         curr_state = self.m.locations[random.choice(list(self.m.locations.keys()))] #https://www.w3schools.com/python/ref_random_choice.asp
         episode = [((curr_state.x, curr_state.y), curr_state.r)]
         while curr_state.endstate is False:
@@ -248,6 +255,9 @@ class Agent:
         return episode
 
     def policy_episode_creator(self):
+        """
+        :return: an episode, a list with positions and actions, that chooses his next position with probabilites made with the pi dictionary until the state is an endstate
+        """
         curr_state = self.m.locations[random.choice(list(self.m.locations.keys()))] #https://www.w3schools.com/python/ref_random_choice.asp
         episode = []
         while curr_state.endstate is False:
